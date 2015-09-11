@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical" >
+
+    <TextView
+        android:id="@+id/fridgeName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="DeviceName"
+		android:textAppearance="?android:attr/textAppearanceLarge"
+        android:textStyle="bold"
+        android:layout_marginLeft="50dp"
+        android:layout_alignParentLeft="true"/>
+
+    <ImageView
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:id="@+id/fridgeStatusImage"
+        android:layout_alignParentLeft="true"
+        android:layout_alignBottom="@id/fridgeName"
+        android:paddingRight="0dp"
+        android:layout_marginLeft="25dp"
+        android:scaleType="centerInside"/>
+
+    <TextView
+        android:id="@+id/deviceInfo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Some info\nRssi etc"
+		android:textAppearance="?android:attr/textAppearanceSmall"
+        android:paddingLeft="25dp"
+        android:layout_below="@id/fridgeName"/>
+
+</RelativeLayout>
