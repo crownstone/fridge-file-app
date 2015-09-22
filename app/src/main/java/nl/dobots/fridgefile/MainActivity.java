@@ -23,6 +23,7 @@ import android.widget.TextView;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -215,9 +216,10 @@ public class MainActivity extends AppCompatActivity
 				int temperature = device.getCurrentTemperature();
 				if (temperature != Integer.MIN_VALUE) {
 					info += temperature + "°C";
-					DateFormat df = new SimpleDateFormat("MMM d, HH:mm:ss");
-					String date = df.format(Calendar.getInstance().getTime());
-					info += " at " + date;
+					DateFormat dateFormat = new SimpleDateFormat("MMM d, HH:mm:ss");
+//					String dateStr = dateFormat.format(Calendar.getInstance().getTime());
+					String dateStr = dateFormat.format(new Date(device.getLastRefreshTime()));
+					info += " at " + dateStr;
 				}
 				else {
 					info += "unknown";

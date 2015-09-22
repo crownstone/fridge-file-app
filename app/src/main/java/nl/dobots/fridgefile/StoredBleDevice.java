@@ -1,5 +1,6 @@
 package nl.dobots.fridgefile;
 
+import java.util.Calendar;
 import android.util.Log;
 
 /**
@@ -27,6 +28,7 @@ public class StoredBleDevice {
 	private int _minTemperature;
 	private int _maxTemperature;
 	private int _currentTemperature;
+	private long _lastRefreshTime;
 
 
 	public StoredBleDevice(String address, String name, int minTemperature, int maxTemperature) {
@@ -35,6 +37,7 @@ public class StoredBleDevice {
 		_minTemperature = minTemperature;
 		_maxTemperature = maxTemperature;
 		_currentTemperature = Integer.MIN_VALUE;
+		_lastRefreshTime = 0;
 	}
 	public StoredBleDevice(String address, String name) {
 		this(address, name, 0, 10); //TODO: magic number
@@ -51,20 +54,16 @@ public class StoredBleDevice {
 		return _name;
 	}
 
+	public void setName(String name) {
+		_name = name;
+	}
+
 	public int getMinTemperature() {
 		return _minTemperature;
 	}
 
 	public int getMaxTemperature() {
 		return _maxTemperature;
-	}
-
-	public int getCurrentTemperature() {
-		return _currentTemperature;
-	}
-
-	public void setName(String name) {
-		_name = name;
 	}
 
 	public void setMinTemperature(int minTemperature) {
@@ -75,7 +74,20 @@ public class StoredBleDevice {
 		_maxTemperature = maxTemperature;
 	}
 
+	public int getCurrentTemperature() {
+		return _currentTemperature;
+	}
+
 	public void setCurrentTemperature(int currentTemperature) {
 		_currentTemperature = currentTemperature;
+		_lastRefreshTime = Calendar.getInstance().getTimeInMillis();
 	}
+
+	public long getLastRefreshTime() {
+		return _lastRefreshTime;
+	}
+
+//	public void setLastRefreshTime(long lastRefreshTime) {
+//		_lastRefreshTime = lastRefreshTime;
+//	}
 }

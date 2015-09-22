@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.IBinder;
 import android.support.v4.app.NotificationCompat;
+import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -154,11 +155,17 @@ public class FridgeFile extends Application {
 	}
 
 
-
+	//////////////////////////////////////////
+	// Communication with the BleFridgeService
+	//////////////////////////////////////////
 	final BleFridgeServiceListener _fridgeListener = new BleFridgeServiceListener() {
 		@Override
 		public void onTemperature(StoredBleDevice device, int temperature) {
-
+			StoredBleDevice listedDevice = _storedDeviceList.get(device);
+			if (listedDevice != null) {
+				Log.d(TAG, "update current temp");
+				listedDevice.setCurrentTemperature(temperature);
+			}
 		}
 	};
 }
