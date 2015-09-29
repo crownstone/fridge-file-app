@@ -128,7 +128,7 @@ public class StoredBleDeviceList extends HashMap<String, StoredBleDevice> {
 				");";
 
 		public DatabaseHelper(Context context) {
-			super(context, FridgeFile.DATABASE_NAME, null, FridgeFile.DATABASE_VERSION);
+			super(context, Config.DATABASE_NAME, null, Config.DATABASE_VERSION);
 		}
 
 		@Override

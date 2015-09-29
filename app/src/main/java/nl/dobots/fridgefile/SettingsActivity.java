@@ -1,28 +1,21 @@
 package nl.dobots.fridgefile;
 
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.content.ServiceConnection;
-import android.os.Handler;
-import android.os.IBinder;
-import android.support.v7.app.AppCompatActivity;
+import android.app.ProgressDialog;
 import android.os.Bundle;
+import android.os.Handler;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import java.util.Iterator;
 import java.util.List;
 
-import nl.dobots.bluenet.BleDeviceConnectionState;
-import nl.dobots.bluenet.BleTypes;
-import nl.dobots.bluenet.callbacks.IDiscoveryCallback;
-import nl.dobots.bluenet.callbacks.IStatusCallback;
-import nl.dobots.bluenet.extended.BleExt;
+import nl.dobots.bluenet.ble.base.callbacks.IStatusCallback;
+import nl.dobots.bluenet.ble.cfg.BleErrors;
+import nl.dobots.bluenet.ble.extended.BleExt;
 
 /**
  * Copyright (c) 2015 Bart van Vliet <bart@dobots.nl>. All rights reserved.
@@ -45,34 +38,28 @@ import nl.dobots.bluenet.extended.BleExt;
 public class SettingsActivity extends AppCompatActivity {
 	private static final String TAG = SettingsActivity.class.getCanonicalName();
 
-	private StoredBleDeviceList _deviceList;
 	private Handler _handler;
-	BleExt _ble;
+	private BleExt _ble;
+
+	private ProgressDialog _progressDialog;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_settings);
 
-		_deviceList = FridgeFile.getInstance().getStoredDeviceList();
 		_ble = FridgeFile.getInstance().getBle();
 		_handler = new Handler();
 
-		if (_fridgeService == null) {
-			bindService(new Intent(this, BleFridgeService.class), _fridgeServiceConnection, Context.BIND_AUTO_CREATE);
-		}
-
 		initUI();
+		_progressDialog = new ProgressDialog(this);
+		_progressDialog.setIndeterminate(true);
 	}
 
 	@Override
 	protected void onDestroy() {
 		super.onDestroy();
 		Log.d(TAG, "onDestroy");
-		if (_fridgeService != null) {
-			_fridgeService.removeListener(_bleFridgeListener);
-			unbindService(_fridgeServiceConnection);
-		}
 		// Remove all callbacks and messages that were posted
 		_handler.removeCallbacksAndMessages(null);
 	}
@@ -80,7 +67,9 @@ public class SettingsActivity extends AppCompatActivity {
 	private void initUI() {
 		final Button applyButton = (Button) findViewById(R.id.applySettingsButton);
 		final EditText editMinTemp = (EditText) findViewById(R.id.editMinTemp);
+		editMinTemp.setText(String.valueOf(Config.DEFAULT_MIN_TEMPERATURE));
 		final EditText editMaxTemp = (EditText) findViewById(R.id.editMaxTemp);
+		editMaxTemp.setText(String.valueOf(Config.DEFAULT_MAX_TEMPERATURE));
 		applyButton.setOnClickListener(new View.OnClickListener() {
 			@Override
 			public void onClick(View v) {
@@ -99,9 +88,18 @@ public class SettingsActivity extends AppCompatActivity {
 				}
 
 				if (success) {
+					_progressDialog.setTitle("Applying settings");
+					_progressDialog.setMessage("please wait ...");
+					_progressDialog.show();
+
 					List<StoredBleDevice> deviceList = FridgeFile.getInstance().getStoredDeviceList().toList();
-					_fridgeService.stopSampling();
-					setNextDevice(deviceList, 0, minTemp, maxTemp);
+					final Iterator<StoredBleDevice> deviceIt = deviceList.iterator();
+					if (deviceIt.hasNext()) {
+						FridgeFile.getInstance().stopSampling();
+						setNextDevice(deviceIt, minTemp, maxTemp);
+					} else {
+						Toast.makeText(getApplicationContext(), "No devices selected!", Toast.LENGTH_SHORT).show();
+					}
 				} else {
 					Toast toast = Toast.makeText(getApplicationContext(), "Invalid settings", Toast.LENGTH_SHORT);
 					toast.show();
@@ -110,14 +108,17 @@ public class SettingsActivity extends AppCompatActivity {
 		});
 	}
 
-	void setNextDevice(final List<StoredBleDevice> deviceList, final int num, final int minTemp, final int maxTemp) {
-		Log.d(TAG, "setNextDevice num=" + num + " minTemp=" + minTemp + " maxTemp=" + maxTemp);
-		if (num >= deviceList.size()) {
+	void setNextDevice(final Iterator<StoredBleDevice> deviceIt, final int minTemp, final int maxTemp) {
+
+		if (!deviceIt.hasNext()) {
 			// Done setting all devices
 			Log.d(TAG, "Done setting all devices");
-			_fridgeService.startSampling();
+			FridgeFile.getInstance().startSampling();
+			_progressDialog.dismiss();
 			return;
 		}
+		final StoredBleDevice device = deviceIt.next();
+		Log.d(TAG, "setNextDevice dev=" + device.getName() + " minTemp=" + minTemp + " maxTemp=" + maxTemp);
 
 		// Wait for connection state to be ok
 		Log.d(TAG, "connection state = " + _ble.getConnectionState());
@@ -136,148 +137,71 @@ public class SettingsActivity extends AppCompatActivity {
 			_handler.postDelayed(new Runnable() {
 				@Override
 				public void run() {
-					setNextDevice(deviceList, num, minTemp, maxTemp);
+					setNextDevice(deviceIt, minTemp, maxTemp);
 				}
 			}, Config.BLE_WAIT_STATE);
 			return;
 		}
 
-		final StoredBleDevice device = deviceList.get(num);
-
-		// Connect and discover services
-		_ble.connectAndDiscover(device.getAddress(), new IDiscoveryCallback() {
-			@Override
-			public void onDiscovery(String serviceUuid, String characteristicUuid) {
-			}
-
+		// Set min temp
+		_ble.setMinEnvTemp(device.getAddress(), minTemp, new IStatusCallback() {
 			@Override
 			public void onSuccess() {
-				Log.d(TAG, "Successfully connected and discovered");
-				if (_ble.hasCharacteristic(BleTypes.CHAR_SET_CONFIGURATION_UUID, null)) {
-					// Set min temp
-//					_ble.setTxPower(minTemp, new IStatusCallback() {
-					_ble.setMinEnvTemp(minTemp, new IStatusCallback() {
-						@Override
-						public void onSuccess() {
-							Log.d(TAG, "Successfully set minTemp");
+				Log.d(TAG, "Successfully set minTemp");
+				device.setMinTemperature(minTemp);
 
-							_handler.postDelayed(new Runnable() {
-								@Override
-								public void run() {
-									// Set max temp
-									_ble.setMaxEnvTemp(maxTemp, new IStatusCallback() {
-//									_ble.setTxPower(maxTemp, new IStatusCallback() {
-										@Override
-										public void onSuccess() {
-											Log.d(TAG, "Successfully set maxTemp");
-											disconnectAndSetNextDevice(deviceList, num, minTemp, maxTemp);
-										}
-
-										@Override
-										public void onError(int error) {
-											Log.d(TAG, "onError set maxTemp");
-											disconnectAndSetNextDevice(deviceList, num, minTemp, maxTemp);
-										}
-									});
-								}
-							}, Config.BLE_DELAY_NEXT_CHAR);
-						}
-
-						@Override
-						public void onError(int error) {
-							Log.d(TAG, "onError set minTemp");
-							disconnectAndSetNextDevice(deviceList, num, minTemp, maxTemp);
-						}
-					});
-				}
-				else {
-					Log.d(TAG, "No config set characteristic found");
-					disconnectAndSetNextDevice(deviceList, num, minTemp, maxTemp);
-				}
-			}
-
-			@Override
-			public void onError(int error) {
-				Log.d(TAG, "onError connect and discover");
-				disconnectAndSetNextDevice(deviceList, num, minTemp, maxTemp);
-			}
-		});
-	}
-
-	/** Delayed disconnect, then: delayed call setNextDevice()
-	 */
-	void disconnectAndSetNextDevice(final List<StoredBleDevice> deviceList, int num, final int minTemp, final int maxTemp) {
-		Log.d(TAG, "disconnectAndSetNextDevice num=" + num + " minTemp=" + minTemp + " maxTemp=" + maxTemp);
-		final int nextNum = num+1;
-		final Runnable delayNext = new Runnable() {
-			@Override
-			public void run() {
-				setNextDevice(deviceList, nextNum, minTemp, maxTemp);
-			}
-		};
-
-		_handler.postDelayed(new Runnable() {
-			@Override
-			public void run() {
-				// Disconnect
-				_ble.disconnect(new IStatusCallback() {
+				// Set max temp
+				_ble.setMaxEnvTemp(maxTemp, new IStatusCallback() {
+					//									_ble.setTxPower(maxTemp, new IStatusCallback() {
 					@Override
 					public void onSuccess() {
-						_handler.postDelayed(delayNext, Config.BLE_DELAY_CONNECT_NEXT_DEVICE);
+						Log.d(TAG, "Successfully set maxTemp");
+						device.setMaxTemperature(maxTemp);
+						disconnectAndSetNextDevice(deviceIt, minTemp, maxTemp);
 					}
 
 					@Override
 					public void onError(int error) {
-						_handler.postDelayed(delayNext, Config.BLE_DELAY_CONNECT_NEXT_DEVICE);
+						if (error == BleErrors.ERROR_CHARACTERISTIC_NOT_FOUND) {
+							Log.d(TAG, "No config set characteristic found");
+						} else {
+							Log.d(TAG, "onError set maxTemp");
+						}
+						disconnectAndSetNextDevice(deviceIt, minTemp, maxTemp);
 					}
 				});
 			}
-		}, Config.BLE_DELAY_DISCONNECT);
+
+			@Override
+			public void onError(int error) {
+				if (error == BleErrors.ERROR_CHARACTERISTIC_NOT_FOUND) {
+					Log.d(TAG, "No config set characteristic found");
+				} else {
+					Log.d(TAG, "onError set minTemp");
+				}
+				disconnectAndSetNextDevice(deviceIt, minTemp, maxTemp);
+			}
+		});
+	}
+
+	/** disconnect, then call setNextDevice()
+	 */
+	void disconnectAndSetNextDevice(final Iterator<StoredBleDevice> deviceIt, final int minTemp, final int maxTemp) {
+		Log.d(TAG, "disconnectAndSetNextDevice");
+
+		// Disconnect
+		_ble.disconnectAndClose(false, new IStatusCallback() {
+			@Override
+			public void onSuccess() {
+				setNextDevice(deviceIt, minTemp, maxTemp);
+			}
+
+			@Override
+			public void onError(int error) {
+				setNextDevice(deviceIt, minTemp, maxTemp);
+			}
+		});
 
 	}
 
-
-	//////////////////////////////////////////
-	// Communication with the BleFridgeService
-	//////////////////////////////////////////
-	private BleFridgeService _fridgeService = null;
-	private ServiceConnection _fridgeServiceConnection = new ServiceConnection() {
-		@Override
-		public void onServiceConnected(ComponentName name, IBinder service) {
-			_fridgeService = ((BleFridgeService.BleFridgeBinder)service).getService();
-			_fridgeService.addListener(_bleFridgeListener);
-		}
-		@Override
-		public void onServiceDisconnected(ComponentName name) {
-			_fridgeService = null;
-		}
-	};
-
-	final private BleFridgeServiceListener _bleFridgeListener = new BleFridgeServiceListener() {
-		@Override
-		public void onTemperature(final StoredBleDevice device, final int temperature) {
-		}
-	};
-
-//	@Override
-//	public boolean onCreateOptionsMenu(Menu menu) {
-//		// Inflate the menu; this adds items to the action bar if it is present.
-//		getMenuInflater().inflate(R.menu.menu_settings, menu);
-//		return true;
-//	}
-//
-//	@Override
-//	public boolean onOptionsItemSelected(MenuItem item) {
-//		// Handle action bar item clicks here. The action bar will
-//		// automatically handle clicks on the Home/Up button, so long
-//		// as you specify a parent activity in AndroidManifest.xml.
-//		int id = item.getItemId();
-//
-//		//noinspection SimplifiableIfStatement
-//		if (id == R.id.action_settings) {
-//			return true;
-//		}
-//
-//		return super.onOptionsItemSelected(item);
-//	}
 }

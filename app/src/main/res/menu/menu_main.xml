@@ -10,6 +10,14 @@
 		  android:title="@string/menu_settings"
 		  android:orderInCategory="100"
 		  app:showAsAction="never"/>
+	<item android:id="@+id/action_statistics"
+		  android:title="@string/menu_statistics"
+		  android:orderInCategory="100"
+		  app:showAsAction="never"/>
+	<item android:id="@+id/action_reset_alerts"
+		  android:title="@string/menu_reset_alerts"
+		  android:orderInCategory="100"
+		  app:showAsAction="never"/>
 	<item android:id="@+id/action_stop_app"
 		  android:title="@string/menu_stop_app"
 		  android:orderInCategory="100"

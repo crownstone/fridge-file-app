@@ -1,5 +1,7 @@
 package nl.dobots.fridgefile;
 
+import nl.dobots.bluenet.ble.base.structs.BleAlertState;
+
 /**
  * Copyright (c) 2015 Bart van Vliet <bart@dobots.nl>. All rights reserved.
  * <p/>
@@ -19,4 +21,5 @@ package nl.dobots.fridgefile;
  */
 public interface BleFridgeServiceListener {
 	void onTemperature(StoredBleDevice device, int temperature);
+	void onAlert(StoredBleDevice device, BleAlertState oldAlertState, BleAlertState newAlertState);
 }

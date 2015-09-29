@@ -1,7 +1,8 @@
 package nl.dobots.fridgefile;
 
 import java.util.Calendar;
-import android.util.Log;
+
+import nl.dobots.bluenet.ble.base.structs.BleAlertState;
 
 /**
  * Copyright (c) 2015 Bart van Vliet <bart@dobots.nl>. All rights reserved.
@@ -30,6 +31,7 @@ public class StoredBleDevice {
 	private int _currentTemperature;
 	private long _lastRefreshTime;
 
+	private BleAlertState _currentAlert;
 
 	public StoredBleDevice(String address, String name, int minTemperature, int maxTemperature) {
 		_address = address;
@@ -38,9 +40,10 @@ public class StoredBleDevice {
 		_maxTemperature = maxTemperature;
 		_currentTemperature = Integer.MIN_VALUE;
 		_lastRefreshTime = 0;
+		_currentAlert = new BleAlertState(0, 0);
 	}
 	public StoredBleDevice(String address, String name) {
-		this(address, name, 0, 10); //TODO: magic number
+		this(address, name, Config.DEFAULT_MIN_TEMPERATURE, Config.DEFAULT_MAX_TEMPERATURE); //TODO: magic number
 	}
 	public StoredBleDevice(String address) {
 		this(address, "");
@@ -87,7 +90,15 @@ public class StoredBleDevice {
 		return _lastRefreshTime;
 	}
 
-//	public void setLastRefreshTime(long lastRefreshTime) {
+	public void setCurrentAlert(BleAlertState alert) {
+		_currentAlert = alert;
+	}
+
+	public BleAlertState getCurrentAlert() {
+		return _currentAlert;
+	}
+
+	//	public void setLastRefreshTime(long lastRefreshTime) {
 //		_lastRefreshTime = lastRefreshTime;
 //	}
 }

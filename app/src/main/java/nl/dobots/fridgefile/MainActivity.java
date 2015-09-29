@@ -4,10 +4,10 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -22,9 +22,10 @@ import android.widget.TextView;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+
+import nl.dobots.bluenet.ble.base.structs.BleAlertState;
 
 /**
  * Copyright (c) 2015 Bart van Vliet <bart@dobots.nl>. All rights reserved.
@@ -71,6 +72,9 @@ public class MainActivity extends AppCompatActivity
 		}
 
 		initListView();
+
+		startActivity(new Intent(this, StatisticsActivity.class));
+
 	}
 
 	@Override
@@ -105,6 +109,12 @@ public class MainActivity extends AppCompatActivity
 			case R.id.action_device_select:
 				startActivity(new Intent(this, DeviceSelectActivity.class));
 				return true;
+			case R.id.action_statistics:
+				startActivity(new Intent(this, StatisticsActivity.class));
+				return true;
+			case R.id.action_reset_alerts:
+				FridgeFile.getInstance().resetAlerts();
+				return true;
 			case R.id.action_stop_app:
 				finish();
 				FridgeFile.getInstance().stop();
@@ -135,16 +145,25 @@ public class MainActivity extends AppCompatActivity
 		_deviceListAdapter.notifyDataSetChanged();
 	}
 
-	private void updateDevice(StoredBleDevice device, int temperature) {
-		Log.d(TAG, "update device");
-		_deviceList = FridgeFile.getInstance().getStoredDeviceList();
-		StoredBleDevice listedDevice = _deviceList.get(device);
-		if (listedDevice != null) {
-			Log.d(TAG, "update current temp");
-			listedDevice.setCurrentTemperature(temperature);
-		}
-		updateDeviceList();
-	}
+//	private void updateDevice(StoredBleDevice device, int temperature) {
+//		Log.d(TAG, "update current temp");
+//		_deviceList = FridgeFile.getInstance().getStoredDeviceList();
+//		StoredBleDevice listedDevice = _deviceList.get(device);
+//		if (listedDevice != null) {
+//			listedDevice.setCurrentTemperature(temperature);
+//		}
+//		updateDeviceList();
+//	}
+
+//	private void updateDevice(StoredBleDevice device, BleAlertState alert) {
+//		Log.d(TAG, "update current alert");
+//		_deviceList = FridgeFile.getInstance().getStoredDeviceList();
+//		StoredBleDevice listedDevice = _deviceList.get(device);
+//		if (listedDevice != null) {
+//			listedDevice.setCurrentAlert(alert);
+//		}
+//		updateDeviceList();
+//	}
 
 	@Override
 	public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
@@ -186,6 +205,7 @@ public class MainActivity extends AppCompatActivity
 			protected TextView deviceNameView;
 			protected TextView deviceInfoView;
 			protected ImageView statusImageView;
+			protected TextView deviceAlertInfoView;
 		}
 
 		@Override
@@ -202,6 +222,7 @@ public class MainActivity extends AppCompatActivity
 				viewHolder.deviceNameView = (TextView) convertView.findViewById(R.id.fridgeName);
 				viewHolder.deviceInfoView = (TextView) convertView.findViewById(R.id.deviceInfo);
 				viewHolder.statusImageView = (ImageView) convertView.findViewById(R.id.fridgeStatusImage);
+				viewHolder.deviceAlertInfoView = (TextView) convertView.findViewById(R.id.alertInfo);
 				convertView.setTag(viewHolder);
 			}
 
@@ -225,6 +246,24 @@ public class MainActivity extends AppCompatActivity
 					info += "unknown";
 				}
 				viewHolder.deviceInfoView.setText(info);
+
+				BleAlertState alert = device.getCurrentAlert();
+				String alertInfo = "";
+				if (alert != null) {
+					if (alert.isTemperatureLowActive()) {
+						alertInfo += "Temperature Low Alert";
+					}
+					if (alert.isTemperatureHighActive()) {
+						if (!alertInfo.equals("")) {
+							alertInfo += "\n";
+						}
+						alertInfo += "Temperature High Alert";
+					}
+					viewHolder.deviceAlertInfoView.setText(alertInfo);
+					viewHolder.deviceAlertInfoView.setVisibility(View.VISIBLE);
+				} else {
+					viewHolder.deviceAlertInfoView.setVisibility(View.GONE);
+				}
 			}
 
 			return convertView;
@@ -262,7 +301,21 @@ public class MainActivity extends AppCompatActivity
 			_handler.post(new Runnable() {
 				@Override
 				public void run() {
-					updateDevice(device, temperature);
+					Log.d(TAG, "temperature update received");
+					updateDeviceList();
+//					updateDevice(device, temperature);
+				}
+			});
+		}
+
+		@Override
+		public void onAlert(final StoredBleDevice device, BleAlertState oldAlertState, final BleAlertState newAlertState) {
+			_handler.post(new Runnable() {
+				@Override
+				public void run() {
+					Log.d(TAG, "alert update received");
+					updateDeviceList();
+//					updateDevice(device, alert);
 				}
 			});
 		}

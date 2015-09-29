@@ -33,4 +33,16 @@
         android:paddingLeft="25dp"
         android:layout_below="@id/fridgeName"/>
 
+    <TextView
+        android:id="@+id/alertInfo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Alert Active"
+		android:textAppearance="?android:attr/textAppearanceSmall"
+        android:textColor="#FF0000"
+        android:textStyle="bold"
+        android:paddingLeft="25dp"
+        android:layout_below="@id/deviceInfo"
+        android:visibility="gone"/>
+
 </RelativeLayout>

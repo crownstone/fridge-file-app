@@ -1,12 +1,9 @@
 package nl.dobots.fridgefile;
 
-import android.os.Handler;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -18,9 +15,10 @@ import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
 
-import nl.dobots.bluenet.callbacks.IBleDeviceCallback;
-import nl.dobots.bluenet.callbacks.IStatusCallback;
-import nl.dobots.bluenet.extended.structs.BleDevice;
+import nl.dobots.bluenet.ble.base.callbacks.IStatusCallback;
+import nl.dobots.bluenet.ble.extended.BleDeviceFilter;
+import nl.dobots.bluenet.ble.extended.callbacks.IBleDeviceCallback;
+import nl.dobots.bluenet.ble.extended.structs.BleDevice;
 
 /**
  * Copyright (c) 2015 Bart van Vliet <bart@dobots.nl>. All rights reserved.
@@ -62,6 +60,8 @@ public class DeviceSelectActivity extends AppCompatActivity implements AdapterVi
 
 		initListView();
 		initButtons();
+
+		FridgeFile.getInstance().stopSampling();
 	}
 
 	@Override
@@ -80,6 +80,9 @@ public class DeviceSelectActivity extends AppCompatActivity implements AdapterVi
 
 			}
 		});
+
+		FridgeFile.getInstance().startSampling();
+
 	}
 
 	//	@Override
@@ -112,9 +115,10 @@ public class DeviceSelectActivity extends AppCompatActivity implements AdapterVi
 				if (!_isScanning) {
 					_isScanning = true;
 					doneButton.setText(R.string.scan_stop);
+					FridgeFile.getInstance().getBle().setScanFilter(BleDeviceFilter.fridge);
 					FridgeFile.getInstance().getBle().startScan(new IBleDeviceCallback() {
 						@Override
-						public void onSuccess(BleDevice device) {
+						public void onDeviceScanned(BleDevice device) {
 							updateDeviceList();
 						}
 
@@ -164,8 +168,13 @@ public class DeviceSelectActivity extends AppCompatActivity implements AdapterVi
 	}
 
 	private void updateDeviceList() {
-		_scannedDeviceListCopy = new ArrayList<>(FridgeFile.getInstance().getBle().getDeviceMap().values());
-		_deviceListAdapter.notifyDataSetChanged();
+		runOnUiThread(new Runnable() {
+			@Override
+			public void run() {
+				_scannedDeviceListCopy = new ArrayList<>(FridgeFile.getInstance().getBle().getDeviceMap().values());
+				_deviceListAdapter.notifyDataSetChanged();
+			}
+		});
 	}
 
 	@Override

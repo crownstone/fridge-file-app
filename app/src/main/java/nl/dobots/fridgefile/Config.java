@@ -31,4 +31,15 @@ public class Config {
 	public static final int BLE_DELAY_DISCONNECT = 1000; // ms
 	/** Time to wait to check the connection state again (sampling) */
 	public static final int BLE_WAIT_STATE = 100; // ms
+	/** Notification ID for Alert notifications */
+	public static final int ALERT_NOTIFICATION_ID = 1001;
+	/** Default minimum temperature for Alert */
+	public static final int DEFAULT_MIN_TEMPERATURE = 0;
+	/** Default maximum temperature for Alert */
+	public static final int DEFAULT_MAX_TEMPERATURE = 10;
+	/** Delay in ms between sampling the devices */
+	public static final int SAMPLE_DELAY_MILLIS = 10000;
+	public static final String DATABASE_NAME = "FridgeFileDataBase";
+	public static final int DATABASE_VERSION = 1;
+	public static final String PREFERENCES_FILE = "FridgeFilePreferences";
 }

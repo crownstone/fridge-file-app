@@ -8,12 +8,15 @@ import android.os.IBinder;
 import android.util.Log;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
-import nl.dobots.bluenet.BleDeviceConnectionState;
-import nl.dobots.bluenet.callbacks.IIntegerCallback;
-import nl.dobots.bluenet.callbacks.IStatusCallback;
-import nl.dobots.bluenet.extended.BleExt;
+import nl.dobots.bluenet.ble.base.callbacks.IAlertCallback;
+import nl.dobots.bluenet.ble.base.callbacks.IIntegerCallback;
+import nl.dobots.bluenet.ble.base.callbacks.IStatusCallback;
+import nl.dobots.bluenet.ble.base.structs.BleAlertState;
+import nl.dobots.bluenet.ble.extended.BleDeviceConnectionState;
+import nl.dobots.bluenet.ble.extended.BleExt;
 
 /**
  * Copyright (c) 2015 Bart van Vliet <bart@dobots.nl>. All rights reserved.
@@ -37,14 +40,13 @@ public class BleFridgeService extends Service {
 	private BleExt _ble;
 	private Handler _handler = new Handler();
 	private List<BleFridgeServiceListener> _listenerList = new ArrayList<>();
-	private int _checkDeviceNum;
+	private boolean _deviceCheckRunning;
 
 	@Override
 	public void onCreate() {
 		super.onCreate();
 		_ble = FridgeFile.getInstance().getBle();
 		startSampling();
-		_checkDeviceNum = 0;
 	}
 
 	@Override
@@ -70,15 +72,20 @@ public class BleFridgeService extends Service {
 	}
 
 	public void startSampling() {
+		Log.d(TAG, "start sampling");
 		_handler.removeCallbacks(stopSamplingRunnable);
-		_handler.postDelayed(checkTempRunnable, Config.BLE_DELAY_CONNECT_NEXT_DEVICE);
+		_handler.postDelayed(sampleRunnable, Config.BLE_DELAY_CONNECT_NEXT_DEVICE);
 	}
 
 	public void stopSampling() {
-		_handler.removeCallbacks(checkTempRunnable);
+		Log.d(TAG, "stop sampling");
+		while (_deviceCheckRunning) {
+			// nada
+		}
+		_handler.removeCallbacks(sampleRunnable);
 		switch (_ble.getConnectionState()) {
 			case connected: {
-				_ble.disconnect(new IStatusCallback() {
+				_ble.disconnectAndClose(false, new IStatusCallback() {
 					@Override
 					public void onSuccess() {
 
@@ -98,22 +105,43 @@ public class BleFridgeService extends Service {
 		}
 	}
 
-	final Runnable checkTempRunnable = new Runnable() {
+	final Runnable sampleRunnable = new Runnable() {
 		@Override
 		public void run() {
+			Log.d(TAG, "starting new sample ...");
 			StoredBleDeviceList deviceList = FridgeFile.getInstance().getStoredDeviceList();
 			int size = deviceList.size();
 			if (size > 0) {
-				// Check here, as the list may have changed since last time
-				if (_checkDeviceNum >= size) {
-					_checkDeviceNum = 0;
+				switch (_ble.getConnectionState()) {
+				case initialized: {
+					Iterator<StoredBleDevice> deviceIt = deviceList.toList().iterator();
+					if (deviceIt.hasNext()) {
+						checkDevices(deviceIt);
+						return;
+					}
 				}
-				if (_ble.getConnectionState() == BleDeviceConnectionState.initialized) {
-					checkTemperature(deviceList.toList().get(_checkDeviceNum));
-					_checkDeviceNum++;
+				case uninitialized: {
+					Log.e(TAG, "Bluetooth is disabled!");
+					break;
+				}
+				default: {
+					_ble.disconnectAndClose(false, new IStatusCallback() {
+						@Override
+						public void onSuccess() {
+							checkDeviceDone();
+
+						}
+
+						@Override
+						public void onError(int error) {
+							checkDeviceDone();
+						}
+					});
+					break;
+				}
 				}
 			}
-			_handler.postDelayed(this, 10000); //TODO: magic nr
+			_handler.postDelayed(sampleRunnable, Config.SAMPLE_DELAY_MILLIS); //TODO: magic nr
 		}
 	};
 
@@ -124,29 +152,175 @@ public class BleFridgeService extends Service {
 		}
 	};
 
-	private void checkTemperature(final StoredBleDevice device) {
-		Log.d(TAG, "check temperature of " + device.getAddress());
-		// Also connects and discovers
-		_ble.readTemperature(device.getAddress(), new IIntegerCallback() {
+	private void checkDeviceFailed(final Iterator<StoredBleDevice> deviceIt) {
+		_ble.disconnectAndClose(false, new IStatusCallback() {
 			@Override
-			public void onSuccess(int result) {
-				Log.d(TAG, "Current temperature of " + device.getAddress() + "(" + device.getName() + ") = " + result);
-				sendToListeners(device, result);
+			public void onSuccess() {
+				Log.d(TAG, "success");
+//				checkNextDevice(deviceIt);
 			}
 
 			@Override
 			public void onError(int error) {
-				_ble.disconnect(new IStatusCallback() {
+				Log.d(TAG, "Error");
+//				checkNextDevice(deviceIt);
+			}
+		});
+		checkNextDevice(deviceIt);
+	}
+
+	private void checkDevices(final Iterator<StoredBleDevice> deviceIt) {
+		_deviceCheckRunning = true;
+		final StoredBleDevice device = deviceIt.next();
+		Log.d(TAG, "checking device: " + device.getAddress() + "(" + device.getName() + ")");
+		checkTemperature(device, new IStatusCallback() {
+
+			@Override
+			public void onError(int error) {
+				checkDeviceFailed(deviceIt);
+			}
+
+			@Override
+			public void onSuccess() {
+				checkAlerts(device, new IStatusCallback() {
+
+					@Override
+					public void onError(int error) {
+						checkDeviceFailed(deviceIt);
+					}
+
 					@Override
 					public void onSuccess() {
+						_ble.disconnectAndClose(false, new IStatusCallback() {
+							@Override
+							public void onSuccess() {
+								checkNextDevice(deviceIt);
+							}
 
+							@Override
+							public void onError(int error) {
+								checkDeviceFailed(deviceIt);
+							}
+						});
+					}
+				});
+			}
+		});
+	}
+
+	private void checkNextDevice(final Iterator<StoredBleDevice> deviceIt) {
+//		_handler.postDelayed(new Runnable() {
+//			@Override
+//			public void run() {
+				Log.i(TAG, "checking next device");
+				if (deviceIt.hasNext()) {
+					checkDevices(deviceIt);
+				} else {
+					checkDeviceDone();
+				}
+//			}
+//		}, 500);
+	}
+
+	private void checkAlerts(final StoredBleDevice device, final IStatusCallback callback) {
+		Log.d(TAG, "checking alerts ...");
+		_ble.readAlert(device.getAddress(), new IAlertCallback() {
+			@Override
+			public void onSuccess(BleAlertState result) {
+				Log.d(TAG, "Current alerts of device " + device.getAddress() + "(" + device.getName() + ") = " + result);
+				BleAlertState oldAlertState = device.getCurrentAlert();
+				device.setCurrentAlert(result);
+				sendAlertsToListeners(device, oldAlertState, result);
+				callback.onSuccess();
+			}
+
+			@Override
+			public void onError(int error) {
+				callback.onError(error);
+			}
+		});
+	}
+
+	private void checkDeviceDone() {
+		Log.d(TAG, "... finished sample");
+		_handler.postDelayed(sampleRunnable, 10000); //TODO: magic nr
+		_deviceCheckRunning = false;
+	}
+
+	private void checkTemperature(final StoredBleDevice device, final IStatusCallback callback) {
+		Log.d(TAG, "checking temperature ...");
+		_ble.readTemperature(device.getAddress(), new IIntegerCallback() {
+			@Override
+			public void onSuccess(int result) {
+				Log.d(TAG, "Current temperature of " + device.getAddress() + "(" + device.getName() + ") = " + result);
+				device.setCurrentTemperature(result);
+				sendTemperatureToListeners(device, result);
+				callback.onSuccess();
+			}
+
+			@Override
+			public void onError(int error) {
+				callback.onError(error);
+			}
+		});
+	}
+
+	private void resetDeviceAlertsDone() {
+		startSampling();
+	}
+
+	public void resetDeviceAlerts() {
+		stopSampling();
+
+		if (_ble.getConnectionState() == BleDeviceConnectionState.initialized) {
+			StoredBleDeviceList deviceList = FridgeFile.getInstance().getStoredDeviceList();
+			Iterator<StoredBleDevice> deviceIt = deviceList.toList().iterator();
+			if (deviceIt.hasNext()) {
+				resetAlert(deviceIt);
+				return;
+			}
+		} else {
+			_ble.disconnectAndClose(false, new IStatusCallback() {
+				@Override
+				public void onSuccess() {
+					resetDeviceAlertsDone();
+				}
+
+				@Override
+				public void onError(int error) {
+					resetDeviceAlertsDone();
+				}
+			});
+		}
+
+	}
+
+	private void resetAlert(final Iterator<StoredBleDevice> deviceIt) {
+		StoredBleDevice device = deviceIt.next();
+		Log.d(TAG, "Reset Alert for device " + device.getAddress());
+		_ble.resetAlert(device.getAddress(), new IStatusCallback() {
+			@Override
+			public void onSuccess() {
+				_ble.disconnectAndClose(false, new IStatusCallback() {
+					@Override
+					public void onSuccess() {
+						if (deviceIt.hasNext()) {
+							resetAlert(deviceIt);
+						} else {
+							resetDeviceAlertsDone();
+						}
 					}
 
 					@Override
 					public void onError(int error) {
-
+						resetDeviceAlertsDone();
 					}
 				});
+			}
+
+			@Override
+			public void onError(int error) {
+				resetDeviceAlertsDone();
 			}
 		});
 	}
@@ -179,9 +353,15 @@ public class BleFridgeService extends Service {
 		_listenerList.remove(listener);
 	}
 
-	private void sendToListeners(StoredBleDevice device, int temperature) {
+	private void sendTemperatureToListeners(StoredBleDevice device, int temperature) {
 		for (BleFridgeServiceListener listener : _listenerList) {
 			listener.onTemperature(device, temperature);
+		}
+	}
+
+	private void sendAlertsToListeners(StoredBleDevice device, BleAlertState oldAlertState, BleAlertState newAlertState) {
+		for (BleFridgeServiceListener listener : _listenerList) {
+			listener.onAlert(device, oldAlertState, newAlertState);
 		}
 	}
 }
